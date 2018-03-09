@@ -38,7 +38,7 @@ class HoverAgent(BaseAgent):
         # Save episode stats
         self.stats_filename = os.path.join(
             util.get_param('out'),
-            "stats_{}.csv".format(util.get_timestamp()))  # path to CSV file
+            "Hoverstats_{}.csv".format(util.get_timestamp()))  # path to CSV file
         self.stats_columns = ['episode', 'total_reward']  # specify columns to save
         self.episode_num = 1
         print("Saving stats {} to {}".format(self.stats_columns, self.stats_filename))  # [debug]
