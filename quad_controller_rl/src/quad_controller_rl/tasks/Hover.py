@@ -21,19 +21,21 @@ class Hover(BaseTask):
 
         # Action space: <force_x, .._y, .._z, torque_x, .._y, .._z>
         max_force = 10.0
-        max_torque = 10.0
+        max_torque = 0.0
         self.action_space = spaces.Box(
             np.array([-max_force, -max_force, -max_force, -max_torque, -max_torque, -max_torque]),
             np.array([ max_force,  max_force,  max_force,  max_torque,  max_torque,  max_torque]))
         print("Hover(): action_space = {}".format(self.action_space))  # [debug]
 
         # Task-specific parameters
-        self.max_duration = 25.0  # secs
-        self.target_z = 20  # target height (z position) to reach for successful takeoff
+        self.max_duration = 5.0  # secs
+        self.target_z = 15  # target height (z position) to reach for successful takeoff
         self.target_position = np.array([0.0, 0.0, 20.0]) 
          
     def reset(self):
         # Nothing to reset; just return initial condition
+        self.last_timestamp = None
+        self.last_position = None
         p = self.target_position + np.random.normal(0.5, 0.1, size=3)  # slight random position around the target
         return Pose(
                 position=Point(*p),  # drop off from a slight random height
@@ -46,7 +48,17 @@ class Hover(BaseTask):
 
     def update(self, timestamp, pose, angular_velocity, linear_acceleration):
          # Prepare state vector (pose only; ignore angular_velocity, linear_acceleration)
+        position = np.array([pose.position.x, pose.position.y, pose.position.z])
         
+        orientation = np.array([pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w])
+        
+        if self.last_timestamp is None:
+            velocity = np.array([0.0, 0.0, 0.0])
+        else:
+            velocity = (position - self.last_position) / max(timestamp - self.last_timestamp, 1e-03)  # prevent divide by zero
+        state = np.concatenate([position, orientation, velocity])  # combined state vector
+        self.last_timestamp = timestamp
+        self.last_position = position
         state = np.array([
                 pose.position.x, pose.position.y, pose.position.z,
                 pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w])
@@ -54,13 +66,15 @@ class Hover(BaseTask):
         # Compute reward / penalty and check if this episode is complete
         done = False
         
-        reward = -min(abs(self.target_z - pose.position.z), 20.0)  # reward = zero for matching target z, -ve as you go farther, upto -20
+        reward = -min(abs(pose.position.z - self.target_z), 20.0)  # reward = zero for matching target z, -ve as you go farther, upto -20
         
-        if pose.position.z >= self.target_z:  # agent has crossed the target height
+        if pose.position.z == self.target_z:  # agent has crossed the target height
             reward += 10.0  # bonus reward
+            print('Bonus')
             done = True
         elif timestamp > self.max_duration:  # agent has run out of time
             reward -= 10.0  # extra penalty
+            print('Penalty')
             done = True
 
         # Take one RL step, passing in current state and reward, and obtain action
